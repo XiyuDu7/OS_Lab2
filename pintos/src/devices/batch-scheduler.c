@@ -76,12 +76,31 @@ static void transfer_data (const task_t *task);
 /* Releases the slot */
 static void release_slot (const task_t *task);
 
+static struct lock bus_lock;
+static struct condition waiters[NUM_OF_DIRECTIONS][NUM_OF_PRIORITIES];
+static unsigned int waiting[NUM_OF_DIRECTIONS][NUM_OF_PRIORITIES];
+static unsigned int tasks_on_bus;
+static direction_t bus_direction;
+
+
+
 void init_bus (void) {
 
   random_init ((unsigned int)123456789);
 
   /* TODO: Initialize global/static variables,
      e.g. your condition variables, locks, counters etc */
+  lock_init(&bus_lock);
+  for(int d=0; d<NUM_OF_DIRECTIONS;d++ ){
+    for(int p = 0; p<NUM_OF_PRIORITIES; p++){
+      cond_init(&waiters[d][p]);
+      waiting[d][p] = 0;
+    }
+  }
+
+  tasks_on_bus=0;
+  bus_direction = SEND;
+
 }
 
 void batch_scheduler (unsigned int num_priority_send,
@@ -175,6 +194,23 @@ static direction_t other_direction(direction_t this_direction) {
   return this_direction == SEND ? RECEIVE : SEND;
 }
 
+/* Returns true if TASK is NOT allowed onto the bus right now.
+ * Each check corresponds to one invariant of the bus specification.
+ * Caller MUST hold bus_lock (we read shared variables). */
+static bool must_wait(const task_t *task){
+  if(tasks_on_bus == BUS_CAPACITY){
+    return true;
+  }
+
+  if (tasks_on_bus > 0 && bus_direction != task->direction)
+  return true;
+
+  if (task->priority == NORMAL &&
+    waiting[SEND][PRIORITY] + waiting[RECEIVE][PRIORITY] > 0)
+  return true;
+}
+
+
 void get_slot (const task_t *task) {
 
   /* TODO: Try to get a slot, respect the following rules:
@@ -188,6 +224,10 @@ void get_slot (const task_t *task) {
    * feel free to schedule priority tasks of the same direction,
    * even if there are priority tasks of the other direction waiting
    */
+
+  dir
+
+
 }
 
 void transfer_data (const task_t *task) {
