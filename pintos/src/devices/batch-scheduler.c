@@ -208,6 +208,8 @@ static bool must_wait(const task_t *task){
   if (task->priority == NORMAL &&
     waiting[SEND][PRIORITY] + waiting[RECEIVE][PRIORITY] > 0)
   return true;
+
+  return false;
 }
 
 
@@ -225,8 +227,25 @@ void get_slot (const task_t *task) {
    * even if there are priority tasks of the other direction waiting
    */
 
-  dir
+  direction_t d = task->direction;
+  priority_t p = task->priority;
 
+  lock_acquire(&bus_lock);
+
+  waiting[d][p]++;
+
+  while (must_wait(task)){
+    cond_wait(&waiters[d][p], &bus_lock);
+  }
+
+  //When no longer waiting
+  waiting[d][p]--;
+
+  tasks_on_bus++;
+  bus_direction = d;
+
+  //leave critical section
+  lock_release(&bus_lock);
 
 }
 
@@ -241,4 +260,24 @@ void release_slot (const task_t *task) {
    *       - Do you need to notify any waiting task?
    *       - Do you need to increment/decrement any counter?
    */
+  lock_acquire (&bus_lock);
+  tasks_on_bus--;
+
+  direction_t cur = task->direction;
+  direction_t other = other_direction(cur);
+
+  if(waiting[cur][PRIORITY]>0){
+    cond_signal(&waiters[cur][PRIORITY],&bus_lock);
+  }
+  else if(waiting[other][PRIORITY]>0){
+    if (tasks_on_bus == 0)
+      cond_broadcast (&waiters[other][PRIORITY], &bus_lock);
+  }else if(waiting[cur][NORMAL]>0){
+    cond_broadcast(&waiters[cur][NORMAL],&bus_lock);
+  }
+  else if(tasks_on_bus == 0){
+    cond_broadcast(&waiters[other][NORMAL],&bus_lock);
+  }
+  
+  lock_release(&bus_lock);
 }
